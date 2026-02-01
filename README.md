@@ -4,3 +4,5 @@ This is a development done to satisfy the assignment portion for module “Mobil
 Basic Requirements :
 - I did as shown on the screenshot requirements , but enhanced the "Mole" with an actual Mole Emoji
 - This push is focused on the fundementals , getting the core requirements done.
+
+Advanced Requirements :
