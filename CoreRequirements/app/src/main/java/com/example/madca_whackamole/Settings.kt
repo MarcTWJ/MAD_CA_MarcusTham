@@ -1,4 +1,4 @@
-package com.example.madca_whackamole
+package com.example.madca_whackamole.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize

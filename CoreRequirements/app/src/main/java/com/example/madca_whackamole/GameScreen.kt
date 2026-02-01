@@ -1,139 +1,137 @@
-package com.example.madca_whackamole
+package com.example.madca_whackamole.ui
 
-import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.random.Random
-
-@OptIn(ExperimentalMaterial3Api::class)
+import com.example.madca_whackamole.data.*
+import com.example.madca_whackamole.ui.*
 @Composable
 fun GameScreen(
-    onNavigateToSettings: () -> Unit
+    db: androidx.room.RoomDatabase,
+    currentUser: UserEntity,
+    scoreDao: ScoreDao,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToLeaderboard: () -> Unit,
+    gameDurationSeconds: Int = 30
 ) {
-    val context = LocalContext.current
-    val prefs = remember {
-        context.getSharedPreferences("wackamole_prefs", Context.MODE_PRIVATE)
-    }
+    val gridSize = 3
+    val totalCells = gridSize * gridSize
 
-    var score by remember { mutableStateOf(0) }
-    var highScore by remember { mutableStateOf(0) }
-    var timeLeft by remember { mutableStateOf(30) }
-    var moleIndex by remember { mutableStateOf(0) }
-    var gameRunning by remember { mutableStateOf(false) }
-    var hitIndex by remember { mutableStateOf<Int?>(null) }
+    var moleIndex by remember { mutableIntStateOf(Random.nextInt(totalCells)) }
+    var score by remember { mutableIntStateOf(0) }
+    var timeLeft by remember { mutableIntStateOf(gameDurationSeconds) }
+    var gameRunning by remember { mutableStateOf(true) }
 
-
-    // Load high score
-    LaunchedEffect(Unit) {
-        highScore = prefs.getInt("HIGH_SCORE", 0)
-    }
-
-    // Countdown timer
+    // Creating timer effect
     LaunchedEffect(gameRunning) {
-        if (gameRunning) {
-            while (timeLeft > 0) {
-                delay(1000)
-                timeLeft--
-            }
-            gameRunning = false
+        while (gameRunning && timeLeft > 0) {
+            delay(1000)
+            timeLeft -= 1
         }
+        gameRunning = false
     }
 
-    // Mole movement
+    // Creating mole movement delay
     LaunchedEffect(gameRunning) {
         while (gameRunning) {
             delay(Random.nextLong(700, 1000))
-            moleIndex = Random.nextInt(9)
+            moleIndex = Random.nextInt(totalCells)
         }
     }
 
-    // Saving high score on game end
-    LaunchedEffect(gameRunning) {
-        if (!gameRunning && timeLeft == 0 && score > highScore) {
-            highScore = score
-            prefs.edit().putInt("HIGH_SCORE", highScore).apply()
-        }
-    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("Wack-a-Mole", style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Score: $score", style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("Time: $timeLeft s", style = MaterialTheme.typography.bodyLarge)
+        Spacer(modifier = Modifier.height(16.dp))
 
-    Column(modifier = Modifier.fillMaxSize()) {
-
-        TopAppBar(
-            title = { Text("Wack-a-Mole") },
-            actions = {
-                IconButton(onClick = onNavigateToSettings) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings")
-                }
-            }
-        )
-
-        Column(modifier = Modifier.padding(16.dp)) {
-
-            Text("Score: $score")
-            Text("High Score: $highScore")
-            Text("Time: $timeLeft")
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(onClick = {
-                score = 0
-                timeLeft = 30
-                gameRunning = true
-            }) {
-                Text(if (gameRunning) "Restart" else "Start")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 3x3 Grid to whack moles on (Using Row)
-            for (row in 0..2) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    for (col in 0..2) {
-                        val index = row * 3 + col
-                        Button(
-                            onClick = {
-                                if (gameRunning && index == moleIndex) {
-                                    score++
-                                    hitIndex == index
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .aspectRatio(1f)
-                        ) {
-                            if (gameRunning && index == moleIndex) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("🐹")
-                                }
+        // 3x3 Mole Wacking Grid w/ score saving to database & mole shifting at intervals
+        // I also made it more clear where the mole shows up , so only the button with a mole is
+        // visible when it is required to be clicked (See in fun Molebutton)
+        for (row in 0 until gridSize) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                for (col in 0 until gridSize) {
+                    val index = row * gridSize + col
+                    MoleButton(isMole = index == moleIndex) {
+                        if (index == moleIndex && gameRunning) {
+                            score += 1
+                            CoroutineScope(Dispatchers.IO).launch {
+                                scoreDao.insertScore(Score(userId = currentUser.userId, score = score))
                             }
-
+                            moleIndex = Random.nextInt(totalCells)
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
             }
-            LaunchedEffect(hitIndex) {
-                if (hitIndex != null) {
-                    delay(300)
-                    hitIndex = null
-                }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Buttons for Settings , Leaderboards , Restarts
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Button(onClick = {
+                score = 0
+                timeLeft = gameDurationSeconds
+                gameRunning = true
+                moleIndex = Random.nextInt(totalCells)
+            }) {
+                Text("Restart")
             }
 
-            if (!gameRunning && timeLeft == 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Game Over! Final Score: $score")
+            Button(onClick = onNavigateToLeaderboard) {
+                Text("Leaderboard")
+            }
+
+            Button(onClick = onNavigateToSettings) {
+                Text("Settings")
             }
         }
     }
 }
+
+@Composable
+fun MoleButton(isMole: Boolean, onClick: () -> Unit) {
+    if (isMole) {
+        Button(
+            onClick = onClick,
+            modifier = Modifier.size(80.dp)
+        ) {
+            Text("🐹")
+        }
+    } else {
+        Button(
+            onClick = {},
+            modifier = Modifier.size(80.dp),
+            enabled = false
+        ) {}
+    }
+}
+
+
+
+
+
