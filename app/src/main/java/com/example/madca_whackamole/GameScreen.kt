@@ -132,7 +132,7 @@ fun GameScreen(
 
             if (!gameRunning && timeLeft == 0) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Game Over! Final Score: $score")git
+                Text("Game Over! Final Score: $score")
             }
         }
     }
